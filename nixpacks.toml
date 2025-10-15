@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python312", "gcc", "pkg-config", "cmake", "libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender1", "libgomp1"]
+
+[phases.install]
+cmds = [
+  "pip install --upgrade pip",
+  "pip install --no-cache-dir -r requirements.txt"
+]
+
+[start]
+cmd = "python app_mongodb.py"
