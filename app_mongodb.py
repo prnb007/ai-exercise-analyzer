@@ -5,9 +5,16 @@ Production-ready Flask app with MongoDB and optimized video handling
 
 import os
 import cv2
-import torch
 import numpy as np
 import mediapipe as mp
+
+# Optional PyTorch import (for LSTM models)
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    print("PyTorch not available, using fallback methods")
 
 # MediaPipe drawing utilities
 mp_drawing = mp.solutions.drawing_utils
@@ -2003,11 +2010,15 @@ def allowed_file(filename):
 
 if __name__ == '__main__':
     print("Exercise Form Analyzer - MongoDB Version")
-    print("Open your browser and go to: http://localhost:5003")
     print("AI-powered form analysis enabled")
     print("User authentication enabled")
     print("Exercise history tracking enabled")
     print("MongoDB database enabled")
     print("Temporary video storage enabled")
     
-    app.run(debug=True, host='0.0.0.0', port=5003)
+    # Get port from environment variable (Railway sets this)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    print(f"Starting server on port {port}")
+    app.run(debug=debug, host='0.0.0.0', port=port)
