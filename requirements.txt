@@ -1,31 +1,15 @@
-# Core Flask dependencies
+# Railway-optimized requirements
 Flask==2.3.3
 Werkzeug==2.3.7
-Jinja2==3.1.2
-MarkupSafe==2.1.3
-itsdangerous==2.1.2
-click==8.1.7
-blinker==1.6.3
-
-# Database
 pymongo==4.6.0
 dnspython==2.4.2
-
-# AI/ML (minimal versions for Railway)
 opencv-python-headless==4.8.1.78
 numpy==1.24.3
-scikit-learn==1.3.2
-
-# MediaPipe (CPU only)
 mediapipe==0.10.7
-
-# Utilities
 Pillow==10.1.0
 python-dotenv==1.0.0
 bcrypt==4.1.2
 email-validator==2.1.0
 WTForms==3.1.0
 Flask-WTF==1.2.1
-
-# Production server
 gunicorn==21.2.0
