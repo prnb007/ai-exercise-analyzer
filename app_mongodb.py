@@ -10,6 +10,7 @@ import numpy as np
 try:
     import cv2
     OPENCV_AVAILABLE = True
+    print("OpenCV loaded successfully")
 except ImportError:
     OPENCV_AVAILABLE = False
     print("OpenCV not available, using fallback methods")
@@ -18,6 +19,7 @@ except ImportError:
 try:
     import mediapipe as mp
     MEDIAPIPE_AVAILABLE = True
+    print("MediaPipe loaded successfully")
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
     print("MediaPipe not available, using fallback methods")
@@ -26,6 +28,7 @@ except ImportError:
 try:
     import torch
     TORCH_AVAILABLE = True
+    print("PyTorch loaded successfully")
 except ImportError:
     TORCH_AVAILABLE = False
     print("PyTorch not available, using fallback methods")
