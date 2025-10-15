@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python312", "opencv", "ffmpeg", "gcc", "gfortran", "pkg-config", "cmake", "libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender1", "libgomp1"]
+nixPkgs = ["python312"]
 
 [phases.install]
 cmds = [
