@@ -4,9 +4,23 @@ Production-ready Flask app with MongoDB and optimized video handling
 """
 
 import os
-import cv2
 import numpy as np
-import mediapipe as mp
+
+# Optional OpenCV import
+try:
+    import cv2
+    OPENCV_AVAILABLE = True
+except ImportError:
+    OPENCV_AVAILABLE = False
+    print("OpenCV not available, using fallback methods")
+
+# Optional MediaPipe import
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    print("MediaPipe not available, using fallback methods")
 
 # Optional PyTorch import (for LSTM models)
 try:
@@ -16,9 +30,13 @@ except ImportError:
     TORCH_AVAILABLE = False
     print("PyTorch not available, using fallback methods")
 
-# MediaPipe drawing utilities
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
+# MediaPipe drawing utilities (conditional)
+if MEDIAPIPE_AVAILABLE:
+    mp_drawing = mp.solutions.drawing_utils
+    mp_drawing_styles = mp.solutions.drawing_styles
+else:
+    mp_drawing = None
+    mp_drawing_styles = None
 import hashlib
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash, current_app, send_file, send_from_directory
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
