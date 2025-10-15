@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Challenge - Exercise Form Analyzer{% endblock %}
+
+{% block content %}
+<div class="daily-challenge-container">
+    <div class="challenge-header">
+        <h1><i class="fas fa-calendar-day"></i> Daily Challenge</h1>
+        <p>Complete today's challenge to earn bonus XP and cards!</p>
+    </div>
+    
+    {% if challenge %}
+    <div class="challenge-card">
+        <div class="challenge-info">
+            <h2>{{ challenge.name }}</h2>
+            <p class="challenge-description">{{ challenge.description }}</p>
+            
+            <div class="challenge-requirements">
+                <div class="requirement">
+                    <i class="fas fa-video"></i>
+                    <span>Video Required (3-60 seconds)</span>
+                </div>
+                <div class="requirement">
+                    <i class="fas fa-target"></i>
+                    <span>{{ challenge.target_accuracy }}% accuracy</span>
+                </div>
+            </div>
+            
+            <div class="challenge-rewards">
+                <div class="reward-item">
+                    <i class="fas fa-star"></i>
+                    <span>+{{ challenge.xp_reward }} XP</span>
+                </div>
+                {% if challenge.card_reward %}
+                <div class="reward-item">
+                    <i class="fas fa-id-card"></i>
+                    <span>Special Card</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if user_challenge and user_challenge.completed %}
+        <div class="challenge-completed">
+            <i class="fas fa-check-circle"></i>
+            <h3>Challenge Completed!</h3>
+            <p>Great job! You earned {{ challenge.xp_reward }} XP</p>
+            <p class="completion-date">Completed on {{ user_challenge.completed_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+            {% if user_challenge.score %}
+            <p class="completion-score">Score: {{ user_challenge.score }}%</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="challenge-actions">
+            <button class="cta-button" onclick="scrollToVerification()">
+                <i class="fas fa-play"></i>
+                Start Challenge
+            </button>
+            
+            <div class="verification-options">
+                <h4>Complete Challenge:</h4>
+                
+                <!-- Video Verification Only -->
+                <div class="verification-method">
+                    <h5><i class="fas fa-video"></i> Video Verification Required</h5>
+                    <p>Upload a video of your workout for automatic verification. The AI will analyze your form and count your reps to verify completion.</p>
+                    <form id="videoVerificationForm" enctype="multipart/form-data">
+                        <input type="file" name="video" accept="video/*" required>
+                        <button type="submit" class="cta-button">
+                            <i class="fas fa-upload"></i>
+                            Upload Video for Verification
+                        </button>
+                    </form>
+                    <div class="verification-info">
+                        <p><i class="fas fa-info-circle"></i> <strong>Verification Process:</strong></p>
+                <ul>
+                    <li>AI will analyze your exercise form</li>
+                    <li>Accuracy will be calculated automatically</li>
+                    <li>Challenge will only be marked complete if requirements are met</li>
+                </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="no-challenge">
+        <i class="fas fa-calendar-times"></i>
+        <h3>No Challenge Today</h3>
+        <p>Check back tomorrow for a new daily challenge!</p>
+        <a href="{{ url_for('index') }}" class="cta-button">Continue Training</a>
+    </div>
+    {% endif %}
+    
+    <div class="challenge-history">
+        <h3>Recent Challenges</h3>
+        <div class="history-list">
+            <div class="history-item">
+                <div class="history-date">Today</div>
+                <div class="history-status">
+                    {% if challenge and user_challenge and user_challenge.completed %}
+                        <i class="fas fa-check-circle completed"></i>
+                        <span>Completed</span>
+                    {% elif challenge %}
+                        <i class="fas fa-clock pending"></i>
+                        <span>In Progress</span>
+                    {% else %}
+                        <i class="fas fa-minus unavailable"></i>
+                        <span>No Challenge</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add countdown timer if challenge is active
+    const challengeCard = document.querySelector('.challenge-card');
+    if (challengeCard && !document.querySelector('.challenge-completed')) {
+        // Add some visual effects
+        challengeCard.classList.add('active-challenge');
+    }
+    
+    // Handle video verification form
+    const videoForm = document.getElementById('videoVerificationForm');
+    if (videoForm) {
+        videoForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            // Show loading state
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch(`/verify_challenge_video/{{ challenge._id }}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    if (result.challenge_completed) {
+                        // Challenge completed successfully
+                        showNotification('success', result.message);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 2000);
+                    } else {
+                        // Challenge not completed, show detailed feedback
+                        showNotification('warning', result.message);
+                        showDetailedFeedback(result.requirements, result.analysis_results);
+                    }
+                } else {
+                    showNotification('error', result.message);
+                }
+            } catch (error) {
+                showNotification('error', 'Error verifying challenge: ' + error.message);
+            } finally {
+                // Reset button
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+    }
+    
+});
+
+function showNotification(type, message) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    const iconMap = {
+        'success': 'check-circle',
+        'error': 'exclamation-circle',
+        'warning': 'exclamation-triangle',
+        'info': 'info-circle'
+    };
+    
+    notification.innerHTML = `
+        <i class="fas fa-${iconMap[type] || 'info-circle'}"></i>
+        <span>${message}</span>
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Show notification
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 5000);
+}
+
+function showDetailedFeedback(requirements, analysisResults) {
+    // Create detailed feedback modal
+    const feedbackModal = document.createElement('div');
+    feedbackModal.className = 'feedback-modal';
+    feedbackModal.innerHTML = `
+        <div class="feedback-content">
+            <div class="feedback-header">
+                <h4><i class="fas fa-exclamation-triangle"></i> Challenge Not Completed</h4>
+                <button class="close-btn" onclick="this.parentElement.parentElement.parentElement.remove()">&times;</button>
+            </div>
+            <div class="feedback-body">
+                <div class="analysis-summary">
+                    <h5>Your Performance:</h5>
+                    <div class="performance-grid">
+                        <div class="performance-item">
+                            <span class="label">Reps:</span>
+                            <span class="value ${requirements.achieved_reps >= requirements.target_reps ? 'success' : 'fail'}">
+                                ${requirements.achieved_reps}/${requirements.target_reps}
+                            </span>
+                        </div>
+                        <div class="performance-item">
+                            <span class="label">Accuracy:</span>
+                            <span class="value ${requirements.achieved_accuracy >= requirements.target_accuracy ? 'success' : 'fail'}">
+                                ${requirements.achieved_accuracy}%/${requirements.target_accuracy}%
+                            </span>
+                        </div>
+                        <div class="performance-item">
+                            <span class="label">Score:</span>
+                            <span class="value ${requirements.achieved_score >= requirements.min_score ? 'success' : 'fail'}">
+                                ${requirements.achieved_score}%/${requirements.min_score}%
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="improvement-tips">
+                    <h5>Tips for Next Time:</h5>
+                    <ul>
+                        ${requirements.achieved_reps < requirements.target_reps ? '<li>Focus on completing all required repetitions</li>' : ''}
+                        ${requirements.achieved_accuracy < requirements.target_accuracy ? '<li>Work on maintaining proper form throughout the exercise</li>' : ''}
+                        ${requirements.achieved_score < requirements.min_score ? '<li>Practice the exercise to improve your overall technique</li>' : ''}
+                        <li>Make sure you're visible in the video and well-lit</li>
+                        <li>Perform the exercise at a steady, controlled pace</li>
+                    </ul>
+                </div>
+                <div class="feedback-actions">
+                    <button class="cta-button" onclick="this.parentElement.parentElement.parentElement.remove()">
+                        <i class="fas fa-redo"></i>
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(feedbackModal);
+    
+    // Add styles for the modal
+    const style = document.createElement('style');
+    style.textContent = `
+        .feedback-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .feedback-content {
+            background: white;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        .feedback-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            background: #fff3cd;
+        }
+        .feedback-header h4 {
+            margin: 0;
+            color: #856404;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #856404;
+        }
+        .feedback-body {
+            padding: 20px;
+        }
+        .performance-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .performance-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .performance-item .label {
+            font-weight: 500;
+        }
+        .performance-item .value.success {
+            color: #28a745;
+            font-weight: 600;
+        }
+        .performance-item .value.fail {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        .improvement-tips {
+            margin-top: 20px;
+        }
+        .improvement-tips h5 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        .improvement-tips ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .improvement-tips li {
+            margin-bottom: 5px;
+            color: #6c757d;
+        }
+        .feedback-actions {
+            margin-top: 20px;
+            text-align: center;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function scrollToVerification() {
+    const verificationSection = document.querySelector('.verification-options');
+    if (verificationSection) {
+        verificationSection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+        // Add a highlight effect
+        verificationSection.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.5)';
+        setTimeout(() => {
+            verificationSection.style.boxShadow = '';
+        }, 2000);
+    }
+}
+</script>
+
+<style>
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    max-width: 400px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification-success {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+}
+
+.notification-error {
+    background: linear-gradient(135deg, #f44336, #d32f2f);
+}
+
+.notification-info {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+}
+
+.notification-warning {
+    background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.verification-options {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+}
+
+.verification-method {
+    padding: 20px;
+    background: white;
+    border-radius: 12px;
+    border: 2px solid #007bff;
+    box-shadow: 0 4px 6px rgba(0, 123, 255, 0.1);
+}
+
+.verification-method h5 {
+    color: #007bff;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.verification-method p {
+    color: #495057;
+    margin-bottom: 20px;
+    font-size: 1em;
+    line-height: 1.5;
+}
+
+.verification-info {
+    margin-top: 20px;
+    padding: 15px;
+    background: #e3f2fd;
+    border-radius: 8px;
+    border-left: 4px solid #2196f3;
+}
+
+.verification-info p {
+    color: #1976d2;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.verification-info ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #424242;
+}
+
+.verification-info li {
+    margin-bottom: 5px;
+    line-height: 1.4;
+}
+
+input[type="file"] {
+    width: 100%;
+    padding: 12px;
+    border: 2px dashed #007bff;
+    border-radius: 8px;
+    background: #ffffff;
+    margin-bottom: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #495057;
+    font-size: 14px;
+}
+
+input[type="file"]:hover {
+    border-color: #0056b3;
+    background: #f8f9ff;
+}
+
+input[type="file"]::-webkit-file-upload-button {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+    font-size: 14px;
+}
+
+input[type="file"]::-webkit-file-upload-button:hover {
+    background: #0056b3;
+}
+
+.requirements-modal {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 10px 0;
+    border: 1px solid #dee2e6;
+}
+
+.requirement-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+.achieved {
+    font-weight: 500;
+    color: #28a745;
+}
+</style>
+{% endblock %}
