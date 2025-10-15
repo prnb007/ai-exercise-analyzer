@@ -4,7 +4,15 @@ Production-ready Flask app with MongoDB and optimized video handling
 """
 
 import os
-import numpy as np
+
+# Optional numpy import
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+    print("NumPy loaded successfully")
+except ImportError:
+    NUMPY_AVAILABLE = False
+    print("NumPy not available, using fallback methods")
 
 # Optional OpenCV import
 try:
