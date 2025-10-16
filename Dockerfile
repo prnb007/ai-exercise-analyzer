@@ -1,32 +1,44 @@
-# Use Python 3.11 slim image
+# Multi-stage build to reduce image size
+FROM python:3.11-slim as builder
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final stage - minimal runtime image
 FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV OPENCV_IO_ENABLE_OPENEXR=0
 ENV OPENCV_HEADLESS=1
+ENV PATH="/root/.local/bin:$PATH"
 
-# Install minimal system dependencies (avoid problematic packages)
-RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# Copy only necessary files from builder
+COPY --from=builder /root/.local /root/.local
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
 # Copy application code
-COPY . .
+COPY app_mongodb.py .
+COPY mongodb_config.py .
+COPY mongodb_models.py .
+COPY gamification_manager.py .
+COPY forms.py .
+COPY static/ static/
+COPY templates/ templates/
+COPY models/ models/
 
 # Create necessary directories
 RUN mkdir -p uploads temp
@@ -34,8 +46,5 @@ RUN mkdir -p uploads temp
 # Expose port
 EXPOSE $PORT
 
-# Create startup script
-RUN echo '#!/bin/sh\nPORT=${PORT:-5000}\necho "Starting server on port $PORT"\ngunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 app_mongodb:app' > /app/start.sh && chmod +x /app/start.sh
-
 # Start command
-CMD ["/app/start.sh"]
+CMD ["gunicorn", "app_mongodb:app", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--timeout", "120"]
