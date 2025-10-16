@@ -4,37 +4,10 @@ Production-ready Flask app with MongoDB and optimized video handling
 """
 
 import os
+import cv2
+import torch
 import numpy as np
 import mediapipe as mp
-
-# Set OpenCV environment variables for headless operation
-os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
-os.environ['OPENCV_HEADLESS'] = '1'
-
-# Import OpenCV - this should work in production
-import cv2
-CV2_AVAILABLE = True
-print("OpenCV imported successfully")
-
-# Import PyTorch - this should work in production
-import torch
-print("PyTorch imported successfully")
-
-class DummyVideoCapture:
-    def isOpened(self):
-        return False
-    def get(self, prop):
-        return 30 if prop == cv2.CAP_PROP_FPS else 640
-    def read(self):
-        return False, None
-    def release(self):
-        pass
-
-class DummyVideoWriter:
-    def write(self, frame):
-        return True
-    def release(self):
-        pass
 
 # MediaPipe drawing utilities
 mp_drawing = mp.solutions.drawing_utils
@@ -125,29 +98,8 @@ class PushupLSTM(torch.nn.Module):
             return probabilities[:, 1].item()  # Return probability of correct form
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
-
-# Security headers for production
-@app.after_request
-def after_request(response):
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    return response
-
-# Error handlers for production
-@app.errorhandler(404)
-def not_found(error):
-    return render_template('404.html'), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return render_template('500.html'), 500
-
-@app.errorhandler(413)
-def too_large(error):
-    return jsonify({'error': 'File too large. Maximum size is 100MB.'}), 413
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -175,7 +127,7 @@ def inject_user():
 
 # Session configuration for persistence
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RAILWAY_ENVIRONMENT') is not None
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
@@ -465,31 +417,6 @@ def index():
     # If user is authenticated, show exercise selection
     return render_template('index.html', exercises=EXERCISES)
 
-@app.route('/health')
-def health_check():
-    """Health check endpoint for Railway"""
-    try:
-        # Test database connection
-        from mongodb_config import get_mongodb
-        db = get_mongodb()
-        db.admin.command('ping')
-        
-        # Check OpenCV availability
-        opencv_status = "available" if CV2_AVAILABLE else "fallback"
-        
-        return jsonify({
-            'status': 'healthy',
-            'database': 'connected',
-            'opencv': opencv_status,
-            'timestamp': datetime.now().isoformat()
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
-        }), 500
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -713,30 +640,24 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
         
         if not os.path.exists(model_path) or not os.path.exists(stats_path):
             print(f"Model or stats file not found: {model_path}, {stats_path}")
-            # Create model without loading weights
+            # Use dummy model for testing
             model = PushupLSTM()
             mean_angles = np.array([90, 90, 90, 90, 90])  # Default angles
         else:
-            # Setup model with error handling
-            try:
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                model = PushupLSTM(input_size=exercise_config['input_size'])
-                
-                # Load model state dict
-                state_dict = torch.load(model_path, map_location=device)
-                model.load_state_dict(state_dict)
-                model.eval().to(device)
-                
-                # Load angle stats
-                angle_stats = np.load(stats_path)
-                mean_angles = angle_stats["mean"]
-                
-                print(f"Loaded model from {model_path} with {len(mean_angles)} angle features")
-            except Exception as e:
-                print(f"Model loading failed: {e}")
-                # Create model without loading weights
-                model = PushupLSTM()
-                mean_angles = np.array([90, 90, 90, 90, 90])  # Default angles
+            # Setup model
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = PushupLSTM(input_size=exercise_config['input_size'])
+            
+            # Load model state dict
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.eval().to(device)
+            
+            # Load angle stats
+            angle_stats = np.load(stats_path)
+            mean_angles = angle_stats["mean"]
+            
+            print(f"Loaded model from {model_path} with {len(mean_angles)} angle features")
         
         # Initialize pose detection
         pose = mp_pose.Pose(
@@ -2082,16 +2003,29 @@ def allowed_file(filename):
 
 if __name__ == '__main__':
     print("Exercise Form Analyzer - MongoDB Version")
-    print("Open your browser and go to: http://localhost:5003")
     print("AI-powered form analysis enabled")
     print("User authentication enabled")
     print("Exercise history tracking enabled")
     print("MongoDB database enabled")
     print("Temporary video storage enabled")
     
-# Get port from environment variable (Railway provides this)
-port = int(os.environ.get('PORT', 5000))
-debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    # Get port from environment variable (Railway sets this automatically)
+    port = int(os.environ.get('PORT', 5003))
+    
+    # Determine if running in production
+    is_production = os.environ.get('RAILWAY_ENVIRONMENT') is not None
+    
+    if is_production:
+        print(f"Running in PRODUCTION mode on port {port}")
+        print(f"Open your browser and go to: https://your-app.railway.app")
+    else:
+        print(f"Running in DEVELOPMENT mode on port {port}")
+        print(f"Open your browser and go to: http://localhost:{port}")
+    
+    # Run the app
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=not is_production
+    )
 
-print(f"Starting server on port {port}")
-app.run(debug=debug_mode, host='0.0.0.0', port=port)
