@@ -41,6 +41,8 @@ COPY mongodb_config.py .
 COPY mongodb_models.py .
 COPY gamification_manager.py .
 COPY forms.py .
+COPY simple_app.py .
+COPY start_simple.py .
 COPY static/ static/
 COPY templates/ templates/
 COPY models/ models/
@@ -52,4 +54,4 @@ RUN mkdir -p uploads temp
 EXPOSE 5000
 
 # Start command with proper port handling
-CMD ["sh", "-c", "gunicorn minimal_app:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120"]
+CMD ["sh", "-c", "gunicorn app_mongodb:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120"]

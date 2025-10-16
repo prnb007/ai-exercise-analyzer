@@ -5,20 +5,40 @@ Production-ready Flask app with MongoDB and optimized video handling
 
 import os
 import numpy as np
-import mediapipe as mp
 
-# Set OpenCV environment variables for headless operation
-os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
-os.environ['OPENCV_HEADLESS'] = '1'
+# Lazy imports - only import when needed
+def get_mediapipe():
+    """Lazy import MediaPipe"""
+    try:
+        import mediapipe as mp
+        return mp
+    except ImportError:
+        return None
 
-# Import OpenCV - this should work in production
-import cv2
-CV2_AVAILABLE = True
-print("OpenCV imported successfully")
+def get_opencv():
+    """Lazy import OpenCV"""
+    try:
+        # Set OpenCV environment variables for headless operation
+        os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
+        os.environ['OPENCV_HEADLESS'] = '1'
+        import cv2
+        return cv2, True
+    except ImportError:
+        return None, False
 
-# Import PyTorch - this should work in production
-import torch
-print("PyTorch imported successfully")
+def get_torch():
+    """Lazy import PyTorch"""
+    try:
+        import torch
+        return torch
+    except ImportError:
+        return None
+
+# Initialize these as None, will be set when needed
+mp = None
+cv2 = None
+CV2_AVAILABLE = False
+torch = None
 
 class DummyVideoCapture:
     def isOpened(self):
@@ -36,9 +56,24 @@ class DummyVideoWriter:
     def release(self):
         pass
 
-# MediaPipe drawing utilities
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
+# MediaPipe drawing utilities - lazy loaded
+def get_mp_drawing():
+    """Lazy load MediaPipe drawing utilities"""
+    global mp
+    if mp is None:
+        mp = get_mediapipe()
+    if mp:
+        return mp.solutions.drawing_utils
+    return None
+
+def get_mp_drawing_styles():
+    """Lazy load MediaPipe drawing styles"""
+    global mp
+    if mp is None:
+        mp = get_mediapipe()
+    if mp:
+        return mp.solutions.drawing_styles
+    return None
 import hashlib
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash, current_app, send_file, send_from_directory
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -80,39 +115,67 @@ def calculate_angle(p1, p2, p3):
     
     return angle
 
-class PushupLSTM(torch.nn.Module):
-    """Real LSTM model for exercise analysis"""
+class PushupLSTM:
+    """Real LSTM model for exercise analysis - lazy loaded"""
     def __init__(self, input_size=5, hidden_size=128, num_layers=2, num_classes=2):
-        super(PushupLSTM, self).__init__()
+        self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        
-        # LSTM layer
-        self.lstm = torch.nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        
-        # Fully connected layer
-        self.fc = torch.nn.Linear(hidden_size, num_classes)
+        self.num_classes = num_classes
+        self.model = None
+        self.torch = None
+    
+    def _get_torch(self):
+        """Lazy load PyTorch"""
+        if self.torch is None:
+            self.torch = get_torch()
+        return self.torch
+    
+    def _get_model(self):
+        """Lazy load the actual model"""
+        if self.model is None:
+            torch = self._get_torch()
+            if torch is None:
+                return None
+            
+            class LSTMModule(torch.nn.Module):
+                def __init__(self, input_size, hidden_size, num_layers, num_classes):
+                    super(LSTMModule, self).__init__()
+                    self.hidden_size = hidden_size
+                    self.num_layers = num_layers
+                    self.lstm = torch.nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+                    self.fc = torch.nn.Linear(hidden_size, num_classes)
+                
+                def forward(self, x):
+                    h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size)
+                    c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size)
+                    out, _ = self.lstm(x, (h0, c0))
+                    out = self.fc(out[:, -1, :])
+                    return out
+            
+            self.model = LSTMModule(self.input_size, self.hidden_size, self.num_layers, self.num_classes)
+        return self.model
         
     def forward(self, x):
-        # Initialize hidden state
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size)
+        """Forward pass with lazy loading"""
+        model = self._get_model()
+        if model is None:
+            # Return dummy output if PyTorch not available
+            return None
         
-        if x.is_cuda:
-            h0 = h0.cuda()
-            c0 = c0.cuda()
-        
-        # LSTM forward pass
-        out, _ = self.lstm(x, (h0, c0))
-        
-        # Take the last output
-        out = self.fc(out[:, -1, :])
-        
-        return out
+        return model(x)
     
     def predict(self, data):
         """Make prediction on input data"""
-        self.eval()
+        torch = self._get_torch()
+        if torch is None:
+            return 0.5  # Default probability if PyTorch not available
+        
+        model = self._get_model()
+        if model is None:
+            return 0.5
+        
+        model.eval()
         with torch.no_grad():
             if isinstance(data, np.ndarray):
                 data = torch.tensor(data, dtype=torch.float32)
@@ -125,6 +188,9 @@ class PushupLSTM(torch.nn.Module):
                 data = data.cuda()
             
             output = self.forward(data)
+            if output is None:
+                return 0.5
+            
             probabilities = torch.softmax(output, dim=1)
             return probabilities[:, 1].item()  # Return probability of correct form
 
