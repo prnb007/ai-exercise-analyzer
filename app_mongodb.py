@@ -11,27 +11,23 @@ import mediapipe as mp
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
 os.environ['OPENCV_HEADLESS'] = '1'
 
-# Try to import OpenCV with fallback
-try:
-    import cv2
-    CV2_AVAILABLE = True
-    print("OpenCV imported successfully")
-except ImportError as e:
-    print(f"OpenCV import failed: {e}")
-    CV2_AVAILABLE = False
-    # Create a dummy cv2 module for fallback
-    class DummyCV2:
-        def VideoCapture(self, *args, **kwargs):
-            return DummyVideoCapture()
-        def VideoWriter(self, *args, **kwargs):
-            return DummyVideoWriter()
-        def CAP_PROP_FPS(self):
-            return 30
-        def imread(self, *args, **kwargs):
-            return None
-        def imwrite(self, *args, **kwargs):
-            return True
-    cv2 = DummyCV2()
+# OpenCV is not available in production - use fallback
+CV2_AVAILABLE = False
+print("OpenCV not available - using fallback mode")
+
+# Create a dummy cv2 module for fallback
+class DummyCV2:
+    def VideoCapture(self, *args, **kwargs):
+        return DummyVideoCapture()
+    def VideoWriter(self, *args, **kwargs):
+        return DummyVideoWriter()
+    def CAP_PROP_FPS(self):
+        return 30
+    def imread(self, *args, **kwargs):
+        return None
+    def imwrite(self, *args, **kwargs):
+        return True
+cv2 = DummyCV2()
 
 class DummyVideoCapture:
     def isOpened(self):
