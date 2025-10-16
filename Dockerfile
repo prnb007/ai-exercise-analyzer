@@ -1,32 +1,43 @@
-# Use Python 3.9 slim image for smaller size
-FROM python:3.9-slim
+# Use Python 3.11 slim image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV OPENCV_IO_ENABLE_OPENEXR=0
+ENV OPENCV_HEADLESS=1
+
+# Install system dependencies for OpenCV and PyTorch
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    libgthread-2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install PyTorch CPU version first (smaller)
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-
-# Install other dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p uploads output data
+RUN mkdir -p uploads temp
 
 # Expose port
-EXPOSE 5000
+EXPOSE $PORT
+
+# Create startup script
+RUN echo '#!/bin/sh\nPORT=${PORT:-5000}\necho "Starting server on port $PORT"\ngunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 app_mongodb:app' > /app/start.sh && chmod +x /app/start.sh
 
 # Start command
-CMD ["gunicorn", "app_mongodb:app", "--bind", "0.0.0.0:5000", "--timeout", "300", "--workers", "1"]
+CMD ["/app/start.sh"]
