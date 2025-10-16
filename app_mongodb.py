@@ -37,7 +37,12 @@ def ensure_directories():
     print("Required directories created/verified")
 
 # Call this after app initialization (around line 75)
-ensure_directories()
+# Call this after app initialization (around line 75)
+# Wrap in try-except to prevent startup failures
+try:
+    ensure_directories()
+except Exception as e:
+    print(f"Warning: Directory creation failed: {e}")
 
 # Define missing functions inline
 def calculate_angle(p1, p2, p3):
@@ -245,9 +250,12 @@ def initialize_default_cards():
                 
     except Exception as e:
         print(f"Card initialization error: {e}")
-
-# Initialize database on startup
-initialize_database()
+# Initialize database on startup - wrapped in try-except
+try:
+    initialize_database()
+except Exception as e:
+    print(f"Warning: Database initialization failed: {e}")
+    print("Database will be initialized on first request")
 
 def generate_daily_challenge():
     """Generate a random daily challenge"""
