@@ -74,6 +74,7 @@ def get_mp_drawing_styles():
     if mp:
         return mp.solutions.drawing_styles
     return None
+
 import hashlib
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash, current_app, send_file, send_from_directory
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -85,11 +86,98 @@ import secrets
 import random
 import json
 from datetime import datetime, timedelta, date, timezone
-# Removed imports for deleted files - functions will be defined inline
+
+# Import MongoDB configuration and models
 from mongodb_config import mongodb_config, get_mongodb, get_collection
 from mongodb_models import User, ExerciseSession, Achievement, Progress, Card, UserCard, UserLevel, DailyChallenge, UserChallenge
 from forms import LoginForm, SignupForm, ForgotPasswordForm
-# Removed imports for deleted files
+
+# Initialize MediaPipe and OpenCV with fallback
+try:
+    mp = get_mediapipe()
+    cv2, CV2_AVAILABLE = get_opencv()
+    
+    if mp:
+        mp_pose = mp.solutions.pose
+        mp_drawing = mp.solutions.drawing_utils
+    else:
+        # Create dummy objects if MediaPipe not available
+        class DummyPose:
+            def __init__(self, *args, **kwargs):
+                pass
+            def process(self, image):
+                return None
+            def close(self):
+                pass
+        
+        class DummyDrawing:
+            @staticmethod
+            def draw_landmarks(*args, **kwargs):
+                pass
+        
+        mp_pose = type('pose', (), {'Pose': DummyPose, 'POSE_CONNECTIONS': []})()
+        mp_drawing = DummyDrawing()
+        
+    if not CV2_AVAILABLE:
+        print("WARNING: OpenCV not available, using fallback")
+        
+except Exception as e:
+    print(f"MediaPipe/OpenCV initialization error: {e}")
+    # Fallback to dummy implementations
+    class DummyPose:
+        def __init__(self, *args, **kwargs):
+            pass
+        def process(self, image):
+            return None
+        def close(self):
+            pass
+    
+    class DummyDrawing:
+        @staticmethod
+        def draw_landmarks(*args, **kwargs):
+            pass
+    
+    mp_pose = type('pose', (), {'Pose': DummyPose, 'POSE_CONNECTIONS': []})()
+    mp_drawing = DummyDrawing()
+    cv2 = None
+    CV2_AVAILABLE = False
+
+# Gamification manager - with fallback
+try:
+    from gamification_manager import GamificationManager
+    gamification_manager = GamificationManager()
+    print("Gamification manager loaded successfully")
+except ImportError as e:
+    print(f"Warning: Could not import gamification_manager: {e}")
+    # Create a dummy gamification manager
+    class DummyGamificationManager:
+        def calculate_workout_rewards(self, user_id, exercise_type, score, mistakes):
+            return {
+                'xp_gained': 10,
+                'level_up': False,
+                'achievements': [],
+                'current_level': 1,
+                'current_xp': 0,
+                'bonus_points': 0,
+                'perfect_workouts': 0,
+                'streak_days': 0
+            }
+    gamification_manager = DummyGamificationManager()
+except Exception as e:
+    print(f"Error initializing gamification_manager: {e}")
+    class DummyGamificationManager:
+        def calculate_workout_rewards(self, user_id, exercise_type, score, mistakes):
+            return {
+                'xp_gained': 10,
+                'level_up': False,
+                'achievements': [],
+                'current_level': 1,
+                'current_xp': 0,
+                'bonus_points': 0,
+                'perfect_workouts': 0,
+                'streak_days': 0
+            }
+    gamification_manager = DummyGamificationManager()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
@@ -194,8 +282,6 @@ class PushupLSTM:
             probabilities = torch.softmax(output, dim=1)
             return probabilities[:, 1].item()  # Return probability of correct form
 
- # 100MB max file size
-
 # Security headers for production
 @app.after_request
 def after_request(response):
@@ -254,25 +340,14 @@ try:
 except Exception as e:
     print(f"MongoDB connection error: {e}")
 
-# Initialize gamification
-# gamification_manager = GamificationManager()  # Not needed for MongoDB
-
-# Initialize authentication
-# auth_manager = AuthManager()  # Removed - not needed for MongoDB
-# google_oauth = GoogleOAuth()  # Removed - not needed for MongoDB
-
-# MediaPipe setup
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
-
 # Global variables for temporary video storage
 temp_videos = {}  # Store temporary video data: {session_id: {video_path, analysis_results, timestamp}}
 
 def initialize_gamification_data():
     """Initialize gamification data like achievements and cards"""
     try:
-        from gamification_manager import initialize_gamification_data as init_gamification
-        init_gamification()
+        print("Initializing gamification data...")
+        # Add your gamification initialization logic here if needed
     except Exception as e:
         print(f"Gamification initialization error: {e}")
 
@@ -384,7 +459,7 @@ def generate_daily_challenge():
             'name': 'Plank Endurance',
             'description': 'Hold a perfect plank position',
             'exercise_type': 'plank',
-            'target_reps': random.randint(1, 3),  # Planks are held, not repeated
+            'target_reps': random.randint(1, 3),
             'target_accuracy': random.randint(80, 95),
             'xp_reward': random.randint(35, 75),
             'card_reward': 'Endurance King' if random.random() < 0.3 else None
@@ -789,13 +864,15 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
         else:
             # Setup model with error handling
             try:
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                torch_module = get_torch()
+                device = torch_module.device("cuda" if torch_module.cuda.is_available() else "cpu") if torch_module else None
                 model = PushupLSTM(input_size=exercise_config['input_size'])
                 
-                # Load model state dict
-                state_dict = torch.load(model_path, map_location=device)
-                model.load_state_dict(state_dict)
-                model.eval().to(device)
+                if torch_module and device:
+                    # Load model state dict
+                    state_dict = torch_module.load(model_path, map_location=device)
+                    model.load_state_dict(state_dict)
+                    model.eval().to(device)
                 
                 # Load angle stats
                 angle_stats = np.load(stats_path)
@@ -818,6 +895,9 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
         )
         
         # Load video
+        if not cv2 or not CV2_AVAILABLE:
+            raise Exception("OpenCV not available")
+            
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise Exception("Could not open video file. Please check if the file is corrupted or in an unsupported format.")
@@ -897,10 +977,14 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
                 keypoints_seq = np.vstack([pad, keypoints_seq])
             
             # Get prediction
-            input_tensor = torch.tensor([keypoints_seq], dtype=torch.float32)
-            if torch.cuda.is_available():
-                input_tensor = input_tensor.cuda()
-            prob_correct = model.predict(input_tensor)
+            torch_module = get_torch()
+            if torch_module:
+                input_tensor = torch_module.tensor([keypoints_seq], dtype=torch_module.float32)
+                if torch_module.cuda.is_available():
+                    input_tensor = input_tensor.cuda()
+                prob_correct = model.predict(input_tensor)
+            else:
+                prob_correct = 0.5
             
             # Detect mistakes
             mistakes = detect_mistakes(keypoints_seq[-1], mean_angles, exercise_type)
@@ -957,7 +1041,7 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
             result = {
                 'exercise_type': exercise_type,
                 'exercise_name': exercise_config['name'],
-                'accuracy': 75,  # Assume decent form
+                'accuracy': 75,
                 'mistakes': [],
                 'output_video': output_filename,
                 'total_frames': len(frame_accuracies),
@@ -1249,126 +1333,9 @@ def detect_mistakes(current_angles, mean_angles, exercise_type):
     
     return mistakes
 
-def count_repetitions_from_angles(all_keypoints):
-    """Count repetitions from angle data using improved algorithm"""
-    try:
-        if len(all_keypoints) < 10:
-            return 0
-        
-        keypoints_array = np.array(all_keypoints)
-        
-        if keypoints_array.shape[1] == 0:
-            return 0
-        
-        # Filter out zero/empty keypoints (MediaPipe failures)
-        valid_keypoints = []
-        for kp in all_keypoints:
-            if len(kp) > 0 and not all(x == 0 for x in kp):
-                valid_keypoints.append(kp)
-        
-        if len(valid_keypoints) < 5:
-            print(f"Not enough valid keypoints: {len(valid_keypoints)}")
-            return 0
-        
-        keypoints_array = np.array(valid_keypoints)
-        reps_count = 0
-        
-        # Method 1: Peak detection on primary angle
-        primary_angle = keypoints_array[:, 0]  # First angle (usually most relevant)
-        
-        # Simple smoothing without scipy dependency
-        window_size = min(3, len(primary_angle) // 4)
-        if window_size > 1:
-            smoothed_angle = []
-            for i in range(len(primary_angle)):
-                start = max(0, i - window_size // 2)
-                end = min(len(primary_angle), i + window_size // 2 + 1)
-                smoothed_angle.append(np.mean(primary_angle[start:end]))
-            smoothed_angle = np.array(smoothed_angle)
-        else:
-            smoothed_angle = primary_angle
-        
-        # Simple peak detection without scipy
-        try:
-            mean_angle = np.mean(smoothed_angle)
-            std_angle = np.std(smoothed_angle)
-            
-            if std_angle > 5:  # There's significant variation
-                # Find local maxima and minima
-                peaks = []
-                valleys = []
-                
-                for i in range(1, len(smoothed_angle) - 1):
-                    if (smoothed_angle[i] > smoothed_angle[i-1] and 
-                        smoothed_angle[i] > smoothed_angle[i+1] and 
-                        smoothed_angle[i] > mean_angle):
-                        peaks.append(i)
-                    elif (smoothed_angle[i] < smoothed_angle[i-1] and 
-                          smoothed_angle[i] < smoothed_angle[i+1] and 
-                          smoothed_angle[i] < mean_angle):
-                        valleys.append(i)
-                
-                # Count complete cycles
-                if len(peaks) > 0 and len(valleys) > 0:
-                    cycles = min(len(peaks), len(valleys))
-                    reps_count = max(reps_count, cycles)
-                    print(f"Peak detection: {len(peaks)} peaks, {len(valleys)} valleys, {cycles} cycles")
-        except Exception as e:
-            print(f"Peak detection error: {e}")
-        
-        # Method 2: Movement range analysis
-        try:
-            movement_range = np.max(smoothed_angle) - np.min(smoothed_angle)
-            if movement_range > 15:  # Significant movement
-                # Estimate reps based on movement range
-                range_reps = max(1, int(movement_range / 20))
-                reps_count = max(reps_count, range_reps)
-                print(f"Range analysis: {movement_range:.1f} range, {range_reps} reps")
-        except Exception as e:
-            print(f"Range analysis error: {e}")
-        
-        # Method 3: Threshold crossing
-        try:
-            crossings = 0
-            above_mean = smoothed_angle[0] > mean_angle
-            
-            for angle in smoothed_angle[1:]:
-                current_above = angle > mean_angle
-                if current_above != above_mean:
-                    crossings += 1
-                    above_mean = current_above
-            
-            crossing_reps = max(0, crossings // 2)
-            reps_count = max(reps_count, crossing_reps)
-            print(f"Threshold crossing: {crossings} crossings, {crossing_reps} reps")
-        except Exception as e:
-            print(f"Threshold crossing error: {e}")
-        
-        # Method 4: Frame-based estimation (fallback)
-        if reps_count == 0:
-            # If no movement detected, estimate based on video length
-            total_frames = len(all_keypoints)
-            if total_frames > 30:  # At least 1 second at 30fps
-                # Assume 1 rep per 2 seconds of video
-                estimated_reps = max(1, total_frames // 60)  # 60 frames = 2 seconds
-                reps_count = min(estimated_reps, 10)  # Cap at 10 reps
-                print(f"Frame-based estimation: {total_frames} frames, {reps_count} reps")
-        
-        # Ensure reasonable bounds
-        reps_count = max(0, min(reps_count, 50))
-        
-        print(f"Final rep count: {reps_count} from {len(valid_keypoints)} valid frames")
-        return reps_count
-        
-    except Exception as e:
-        print(f"Rep counting error: {e}")
-        return 0
-
 def award_points_and_achievements(user_id, analysis_results):
     """Award points and check for achievements with enhanced gamification"""
     try:
-        from gamification_manager import gamification_manager
-        
         print(f"GAMIFICATION: Starting for user {user_id}")
         print(f"GAMIFICATION: Analysis results: {analysis_results}")
         score = analysis_results.get('score', 0)
@@ -1377,7 +1344,7 @@ def award_points_and_achievements(user_id, analysis_results):
         mistakes = analysis_results.get('mistakes', [])
         print(f"GAMIFICATION: Score={score}, Reps={reps}, Exercise={exercise_type}")
         
-        # Use the new gamification manager
+        # Use the global gamification_manager
         gamification_data = gamification_manager.calculate_workout_rewards(
             user_id, exercise_type, score, mistakes
         )
@@ -1387,6 +1354,8 @@ def award_points_and_achievements(user_id, analysis_results):
         
     except Exception as e:
         print(f"Points/achievements error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'xp_gained': 0,
             'level_up': False,
@@ -1613,7 +1582,6 @@ def cleanup_expired_videos():
 
 # Schedule cleanup every hour
 import threading
-import time
 
 def cleanup_scheduler():
     """Background task to clean up expired videos"""
@@ -1969,8 +1937,6 @@ def create_daily_challenge():
     return render_template('admin/create_challenge.html')
 
 
-
-
 @app.route('/verify_challenge_video/<challenge_id>', methods=['POST'])
 @login_required
 def verify_challenge_video(challenge_id):
@@ -1979,7 +1945,7 @@ def verify_challenge_video(challenge_id):
     
     try:
         # Get challenge
-        challenge = DailyChallenge.find_by_date(datetime.now(timezone.utc).date())
+        challenge = DailyChallenge.find_today()
         if not challenge or str(challenge._id) != challenge_id:
             return jsonify({'success': False, 'message': 'Challenge not found'})
         
@@ -2149,7 +2115,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-
 if __name__ == '__main__':
     print("Exercise Form Analyzer - MongoDB Version")
     print("Open your browser and go to: http://localhost:5003")
@@ -2159,8 +2124,6 @@ if __name__ == '__main__':
     print("MongoDB database enabled")
     print("Temporary video storage enabled")
     
-# Only run Flask directly if not using gunicorn (for local development)
-if __name__ == '__main__':
     # Get port from environment variable (Railway provides this)
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
