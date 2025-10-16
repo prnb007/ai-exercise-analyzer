@@ -2089,7 +2089,9 @@ if __name__ == '__main__':
     print("MongoDB database enabled")
     print("Temporary video storage enabled")
     
-# Get port from environment variable (Railway provides this)
+# Only run Flask directly if not using gunicorn (for local development)
+if __name__ == '__main__':
+    # Get port from environment variable (Railway provides this)
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
 
