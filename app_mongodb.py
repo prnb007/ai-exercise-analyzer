@@ -286,8 +286,9 @@ def initialize_default_cards():
     except Exception as e:
         print(f"Card initialization error: {e}")
 
-# Initialize database on startup
-initialize_database()
+# Initialize database on startup (only when running directly)
+if __name__ == '__main__':
+    initialize_database()
 
 def generate_daily_challenge():
     """Generate a random daily challenge"""
@@ -361,8 +362,9 @@ def ensure_daily_challenge():
     else:
         print(f"Daily challenge already exists: {existing_challenge.name}")
 
-# Ensure daily challenge exists on startup
-ensure_daily_challenge()
+# Ensure daily challenge exists on startup (only when running directly)
+if __name__ == '__main__':
+    ensure_daily_challenge()
 
 # Exercise configurations
 EXERCISES = {
