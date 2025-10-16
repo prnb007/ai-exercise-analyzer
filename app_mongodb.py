@@ -29,6 +29,16 @@ from mongodb_models import User, ExerciseSession, Achievement, Progress, Card, U
 from forms import LoginForm, SignupForm, ForgotPasswordForm
 # Removed imports for deleted files
 
+def ensure_directories():
+    """Ensure required directories exist"""
+    os.makedirs('output', exist_ok=True)
+    os.makedirs('models', exist_ok=True)
+    os.makedirs('data', exist_ok=True)
+    print("Required directories created/verified")
+
+# Call this after app initialization (around line 75)
+ensure_directories()
+
 # Define missing functions inline
 def calculate_angle(p1, p2, p3):
     """Calculate angle between three points"""

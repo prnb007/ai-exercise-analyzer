@@ -1,0 +1,13 @@
+[phases.setup]
+nixPkgs = ["python311", "libGL", "libGLU", "glib", "ffmpeg"]
+aptPkgs = ["libgomp1"]
+
+[phases.install]
+cmds = [
+  "pip install --upgrade pip wheel setuptools",
+  "pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu",
+  "pip install --no-cache-dir -r requirements.txt"
+]
+
+[start]
+cmd = "gunicorn app_mongodb:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2"
