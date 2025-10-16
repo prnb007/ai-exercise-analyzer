@@ -25,5 +25,5 @@ RUN mkdir -p uploads temp
 # Expose port
 EXPOSE $PORT
 
-# Start command
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--timeout", "120", "app_mongodb:app"]
+# Start command with default port
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120 app_mongodb:app"]
