@@ -7,6 +7,10 @@ import os
 import numpy as np
 import mediapipe as mp
 
+# Set OpenCV environment variables for headless operation
+os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
+os.environ['OPENCV_HEADLESS'] = '1'
+
 # Try to import OpenCV with fallback
 try:
     import cv2
