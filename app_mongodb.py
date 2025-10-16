@@ -11,23 +11,14 @@ import mediapipe as mp
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
 os.environ['OPENCV_HEADLESS'] = '1'
 
-# OpenCV is not available in production - use fallback
-CV2_AVAILABLE = False
-print("OpenCV not available - using fallback mode")
+# Import OpenCV - this should work in production
+import cv2
+CV2_AVAILABLE = True
+print("OpenCV imported successfully")
 
-# Create a dummy cv2 module for fallback
-class DummyCV2:
-    def VideoCapture(self, *args, **kwargs):
-        return DummyVideoCapture()
-    def VideoWriter(self, *args, **kwargs):
-        return DummyVideoWriter()
-    def CAP_PROP_FPS(self):
-        return 30
-    def imread(self, *args, **kwargs):
-        return None
-    def imwrite(self, *args, **kwargs):
-        return True
-cv2 = DummyCV2()
+# Import PyTorch - this should work in production
+import torch
+print("PyTorch imported successfully")
 
 class DummyVideoCapture:
     def isOpened(self):
@@ -44,8 +35,6 @@ class DummyVideoWriter:
         return True
     def release(self):
         pass
-
-import torch
 
 # MediaPipe drawing utilities
 mp_drawing = mp.solutions.drawing_utils
@@ -724,24 +713,30 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
         
         if not os.path.exists(model_path) or not os.path.exists(stats_path):
             print(f"Model or stats file not found: {model_path}, {stats_path}")
-            # Use dummy model for testing
+            # Create model without loading weights
             model = PushupLSTM()
             mean_angles = np.array([90, 90, 90, 90, 90])  # Default angles
         else:
-            # Setup model
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = PushupLSTM(input_size=exercise_config['input_size'])
-            
-            # Load model state dict
-            state_dict = torch.load(model_path, map_location=device)
-            model.load_state_dict(state_dict)
-            model.eval().to(device)
-            
-            # Load angle stats
-            angle_stats = np.load(stats_path)
-            mean_angles = angle_stats["mean"]
-            
-            print(f"Loaded model from {model_path} with {len(mean_angles)} angle features")
+            # Setup model with error handling
+            try:
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                model = PushupLSTM(input_size=exercise_config['input_size'])
+                
+                # Load model state dict
+                state_dict = torch.load(model_path, map_location=device)
+                model.load_state_dict(state_dict)
+                model.eval().to(device)
+                
+                # Load angle stats
+                angle_stats = np.load(stats_path)
+                mean_angles = angle_stats["mean"]
+                
+                print(f"Loaded model from {model_path} with {len(mean_angles)} angle features")
+            except Exception as e:
+                print(f"Model loading failed: {e}")
+                # Create model without loading weights
+                model = PushupLSTM()
+                mean_angles = np.array([90, 90, 90, 90, 90])  # Default angles
         
         # Initialize pose detection
         pose = mp_pose.Pose(

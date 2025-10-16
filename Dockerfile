@@ -7,6 +7,17 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV OPENCV_IO_ENABLE_OPENEXR=0
 ENV OPENCV_HEADLESS=1
 
+# Install system dependencies for OpenCV and PyTorch
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    libgthread-2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR /app
 
