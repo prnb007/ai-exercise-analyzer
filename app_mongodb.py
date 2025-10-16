@@ -56,6 +56,10 @@ from mongodb_models import User, ExerciseSession, Achievement, Progress, Card, U
 from forms import LoginForm, SignupForm, ForgotPasswordForm
 # Removed imports for deleted files
 
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024 
+
 # Define missing functions inline
 def calculate_angle(p1, p2, p3):
     """Calculate angle between three points"""
@@ -124,9 +128,7 @@ class PushupLSTM(torch.nn.Module):
             probabilities = torch.softmax(output, dim=1)
             return probabilities[:, 1].item()  # Return probability of correct form
 
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+ # 100MB max file size
 
 # Security headers for production
 @app.after_request
