@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV OPENCV_IO_ENABLE_OPENEXR=0
 ENV OPENCV_HEADLESS=1
 
-# Install system dependencies for OpenCV
+# Install minimal system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -15,8 +15,6 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender1 \
     libgomp1 \
-    libglib2.0-0 \
-    libgthread-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
