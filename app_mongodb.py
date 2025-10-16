@@ -4,9 +4,46 @@ Production-ready Flask app with MongoDB and optimized video handling
 """
 
 import os
-import cv2
 import numpy as np
 import mediapipe as mp
+
+# Try to import OpenCV with fallback
+try:
+    import cv2
+    CV2_AVAILABLE = True
+    print("OpenCV imported successfully")
+except ImportError as e:
+    print(f"OpenCV import failed: {e}")
+    CV2_AVAILABLE = False
+    # Create a dummy cv2 module for fallback
+    class DummyCV2:
+        def VideoCapture(self, *args, **kwargs):
+            return DummyVideoCapture()
+        def VideoWriter(self, *args, **kwargs):
+            return DummyVideoWriter()
+        def CAP_PROP_FPS(self):
+            return 30
+        def imread(self, *args, **kwargs):
+            return None
+        def imwrite(self, *args, **kwargs):
+            return True
+    cv2 = DummyCV2()
+
+class DummyVideoCapture:
+    def isOpened(self):
+        return False
+    def get(self, prop):
+        return 30 if prop == cv2.CAP_PROP_FPS else 640
+    def read(self):
+        return False, None
+    def release(self):
+        pass
+
+class DummyVideoWriter:
+    def write(self, frame):
+        return True
+    def release(self):
+        pass
 
 import torch
 
@@ -448,9 +485,13 @@ def health_check():
         db = get_mongodb()
         db.admin.command('ping')
         
+        # Check OpenCV availability
+        opencv_status = "available" if CV2_AVAILABLE else "fallback"
+        
         return jsonify({
             'status': 'healthy',
             'database': 'connected',
+            'opencv': opencv_status,
             'timestamp': datetime.now().isoformat()
         }), 200
     except Exception as e:
