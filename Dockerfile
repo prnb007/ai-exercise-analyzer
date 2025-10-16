@@ -25,5 +25,8 @@ RUN mkdir -p uploads temp
 # Expose port
 EXPOSE $PORT
 
-# Start command with default port
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120 app_mongodb:app"]
+# Create startup script
+RUN echo '#!/bin/sh\nPORT=${PORT:-5000}\necho "Starting server on port $PORT"\ngunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 app_mongodb:app' > /app/start.sh && chmod +x /app/start.sh
+
+# Start command
+CMD ["/app/start.sh"]
