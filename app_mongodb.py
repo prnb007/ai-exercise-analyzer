@@ -2090,8 +2090,8 @@ if __name__ == '__main__':
     print("Temporary video storage enabled")
     
 # Get port from environment variable (Railway provides this)
-port = int(os.environ.get('PORT', 5000))
-debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
 
-print(f"Starting server on port {port}")
-app.run(debug=debug_mode, host='0.0.0.0', port=port)
+    print(f"Starting server on port {port}")
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
