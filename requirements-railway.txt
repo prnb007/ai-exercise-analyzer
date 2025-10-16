@@ -1,0 +1,31 @@
+# Optimized requirements for Railway deployment
+# This file reduces image size by using CPU-only versions
+
+# Core Flask dependencies
+Flask==2.3.3
+Werkzeug==2.3.7
+Flask-SQLAlchemy==3.0.5
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+WTForms==3.1.1
+email-validator==2.1.0
+requests==2.31.0
+python-dotenv==1.0.0
+
+# Lightweight AI/ML dependencies (CPU-only, smaller size)
+torch==2.1.0
+torchvision==0.16.0
+opencv-python-headless==4.8.1.78
+mediapipe==0.10.8
+numpy==1.24.4
+
+# Database drivers
+pymongo==4.6.0
+motor==3.3.2
+
+# Production server
+gunicorn==21.2.0
+
+# Additional production dependencies
+Pillow==10.1.0
+python-multipart==0.0.6

@@ -5,9 +5,16 @@ Production-ready Flask app with MongoDB and optimized video handling
 
 import os
 import cv2
-import torch
 import numpy as np
 import mediapipe as mp
+
+# Try to import torch, fallback if not available
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    print("WARNING: PyTorch not available, using fallback analysis")
 
 # MediaPipe drawing utilities
 mp_drawing = mp.solutions.drawing_utils
@@ -687,13 +694,17 @@ def perform_video_analysis(video_path, exercise_type='pushup'):
             mean_angles = np.array([90, 90, 90, 90, 90])  # Default angles
         else:
             # Setup model
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = PushupLSTM(input_size=exercise_config['input_size'])
-            
-            # Load model state dict
-            state_dict = torch.load(model_path, map_location=device)
-            model.load_state_dict(state_dict)
-            model.eval().to(device)
+            if TORCH_AVAILABLE:
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                model = PushupLSTM(input_size=exercise_config['input_size'])
+                
+                # Load model state dict
+                state_dict = torch.load(model_path, map_location=device)
+                model.load_state_dict(state_dict)
+                model.eval().to(device)
+            else:
+                model = None
+                print("WARNING: PyTorch not available, using fallback analysis")
             
             # Load angle stats
             angle_stats = np.load(stats_path)
