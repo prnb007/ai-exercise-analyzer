@@ -52,4 +52,4 @@ RUN mkdir -p uploads temp
 EXPOSE 5000
 
 # Start command with proper port handling
-CMD ["sh", "-c", "gunicorn app_factory:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120"]
+CMD ["sh", "-c", "gunicorn minimal_app:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120"]
