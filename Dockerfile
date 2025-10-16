@@ -48,8 +48,8 @@ COPY models/ models/
 # Create necessary directories
 RUN mkdir -p uploads temp
 
-# Expose port
-EXPOSE $PORT
+# Expose port (Railway will set this)
+EXPOSE 5000
 
-# Start command
-CMD ["gunicorn", "app_mongodb:app", "--bind", "0.0.0.0:$PORT", "--workers", "1", "--timeout", "120"]
+# Start command with proper port handling
+CMD ["sh", "-c", "gunicorn app_mongodb:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120"]
