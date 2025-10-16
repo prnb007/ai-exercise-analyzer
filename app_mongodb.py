@@ -4,50 +4,14 @@ Production-ready Flask app with MongoDB and optimized video handling
 """
 
 import os
+import cv2
+import torch
+import numpy as np
+import mediapipe as mp
 
-# Optional numpy import
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-    print("NumPy loaded successfully")
-except ImportError:
-    NUMPY_AVAILABLE = False
-    print("NumPy not available, using fallback methods")
-
-# Optional OpenCV import
-try:
-    import cv2
-    OPENCV_AVAILABLE = True
-    print("OpenCV loaded successfully")
-except ImportError:
-    OPENCV_AVAILABLE = False
-    print("OpenCV not available, using fallback methods")
-
-# Optional MediaPipe import
-try:
-    import mediapipe as mp
-    MEDIAPIPE_AVAILABLE = True
-    print("MediaPipe loaded successfully")
-except ImportError:
-    MEDIAPIPE_AVAILABLE = False
-    print("MediaPipe not available, using fallback methods")
-
-# Optional PyTorch import (for LSTM models)
-try:
-    import torch
-    TORCH_AVAILABLE = True
-    print("PyTorch loaded successfully")
-except ImportError:
-    TORCH_AVAILABLE = False
-    print("PyTorch not available, using fallback methods")
-
-# MediaPipe drawing utilities (conditional)
-if MEDIAPIPE_AVAILABLE:
-    mp_drawing = mp.solutions.drawing_utils
-    mp_drawing_styles = mp.solutions.drawing_styles
-else:
-    mp_drawing = None
-    mp_drawing_styles = None
+# MediaPipe drawing utilities
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
 import hashlib
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash, current_app, send_file, send_from_directory
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -136,6 +100,27 @@ class PushupLSTM(torch.nn.Module):
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+
+# Security headers for production
+@app.after_request
+def after_request(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
+
+# Error handlers for production
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return render_template('500.html'), 500
+
+@app.errorhandler(413)
+def too_large(error):
+    return jsonify({'error': 'File too large. Maximum size is 100MB.'}), 413
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -452,6 +437,27 @@ def index():
         return render_template('landing.html')
     # If user is authenticated, show exercise selection
     return render_template('index.html', exercises=EXERCISES)
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Railway"""
+    try:
+        # Test database connection
+        from mongodb_config import get_mongodb
+        db = get_mongodb()
+        db.admin.command('ping')
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 @app.route('/dashboard')
 @login_required
@@ -2039,15 +2045,16 @@ def allowed_file(filename):
 
 if __name__ == '__main__':
     print("Exercise Form Analyzer - MongoDB Version")
+    print("Open your browser and go to: http://localhost:5003")
     print("AI-powered form analysis enabled")
     print("User authentication enabled")
     print("Exercise history tracking enabled")
     print("MongoDB database enabled")
     print("Temporary video storage enabled")
     
-    # Get port from environment variable (Railway sets this)
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') != 'production'
+    # Get port from environment variable (Railway provides this)
+    port = int(os.environ.get('PORT', 5003))
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
     
     print(f"Starting server on port {port}")
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
